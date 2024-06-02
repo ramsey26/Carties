@@ -6,6 +6,7 @@ using AutoMapper.QueryableExtensions;
 using Contracts;
 using MassTransit;
 using MassTransit.Testing;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -51,13 +52,13 @@ public class AuctionsController : ControllerBase
         return _mapper.Map<AuctionDto>(auction);
     }
 
+    [Authorize]
     [HttpPost]
     public async Task<ActionResult<AuctionDto>> CreateAuction(CreateAuctionDto auctionDto)
     {
         var auction = _mapper.Map<Auction>(auctionDto);
 
-        // TODO: Check seller username     
-        auction.Seller = "test";
+        auction.Seller = User.Identity.Name;
 
         _dbContext.Auctions.Add(auction);
         var newAuction = _mapper.Map<AuctionDto>(auction);
@@ -69,6 +70,7 @@ public class AuctionsController : ControllerBase
         return CreatedAtAction(nameof(GetAuctionById), new { auction.Id }, newAuction);
     }
 
+    [Authorize]
     [HttpPut("{id}")]
     public async Task<ActionResult> UpdateAuction(Guid id, UpdateAuctionDto auctionDto)
     {
@@ -78,7 +80,7 @@ public class AuctionsController : ControllerBase
 
         if (auction == null) return NotFound();
 
-        // TODO: Check seller username    
+        if (auction.Seller != User.Identity.Name) return Forbid();
         auction.Item.Make = auctionDto.Make ?? auction.Item.Make;
         auction.Item.Model = auctionDto.Model ?? auction.Item.Model;
         auction.Item.Year = auctionDto.Year ?? auction.Item.Year;
@@ -99,10 +101,9 @@ public class AuctionsController : ControllerBase
 
         if (auction == null) return NotFound();
 
-        // TODO: Check seller username   
-
+        if (auction.Seller != User.Identity.Name) return Forbid();
         _dbContext.Auctions.Remove(auction);
-        await _publishEndpoint.Publish<AuctionDeleted>(new {Id = auction.Id.ToString()});
+        await _publishEndpoint.Publish<AuctionDeleted>(new { Id = auction.Id.ToString() });
         var result = await _dbContext.SaveChangesAsync() > 0;
         if (!result) return BadRequest("Could not delete");
 
